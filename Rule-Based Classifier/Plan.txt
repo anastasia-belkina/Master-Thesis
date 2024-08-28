@@ -1,0 +1,72 @@
+To implement a rule-based classifier based on the paper "Detecting Expressions of Blame or Praise in Text," which relies on the Path Model of Blame, here is a detailed step-by-step plan:
+
+### 1. Understand the Path Model of Blame
+The Path Model of Blame consists of stages that help determine whether a particular text expresses blame or praise. The key stages include:
+- **Event Detection:** Identify whether a relevant event is present.
+- **Agent Causality:** Determine if a moral agent is responsible for the event.
+- **Foreseeability and Coercion:** Identify if the event was foreseeable by the agent or if coercion played a role.
+
+### 2. Prepare the Environment
+Ensure your environment is set up:
+- Install necessary Python libraries: `nltk`, `spacy`, `scikit-learn`, `StanfordNLP`, etc.
+- Load the necessary NLP models and tools like POS taggers, dependency parsers, and named entity recognition (NER) models.
+
+### 3. Text Preprocessing
+Start with typical text preprocessing steps:
+- **Sentence Splitting and Tokenization:** Break the text into sentences and words.
+- **Part-of-Speech (POS) Tagging:** Annotate each word with its POS tag.
+- **Named Entity Recognition (NER):** Identify entities like people, organizations, etc.
+- **Word Sense Disambiguation (WSD):** Resolve ambiguity for words with multiple meanings.
+
+### 4. Event Detection
+- **Verb-Object Pattern Identification:** Using dependency parsing, detect events by identifying verbs paired with their objects.
+- **Polarity Detection:** Classify events as positive or negative based on sentiment analysis using lexicons (e.g., SentiWordNet).
+- **Negation Handling:** Consider negations during sentiment analysis to correctly classify the event's polarity.
+
+### 5. Agent Causality Determination
+- **Identify Moral Agents:** Use NER to detect whether the subject is a person, organization, or country.
+- **Causation Patterns:** Apply patterns like "NP verb NP" (noun-phrase, verb, noun-phrase) to identify causality.
+
+### 6. Foreseeability and Coercion
+- **Foreseeability:** Detect verbs that imply foreknowledge (e.g., communication verbs like "say", "tell").
+- **Coercion:** Identify verbs or phrases indicating coercion (e.g., "forced", "pressured", "coerced").
+
+### 7. Classification Logic
+Based on the above features, classify the text as one of the following:
+- **Blame:** The agent is held responsible for a negative event.
+  - **Self-Blame:** The agent is the speaker themselves.
+  - **Blame Others:** The agent is another person or entity.
+- **Praise:** The agent is credited for a positive event.
+  - **Self-Praise:** The agent is the speaker.
+  - **Praise Others:** The agent is another person or entity.
+- **Others:** No blame or praise is expressed.
+
+### 8. Corpus Annotation and Data Preparation
+- Use the ISEAR dataset or any similar corpus annotated for blame and praise.
+- If you create a new dataset, follow annotation guidelines similar to the paper (label sentences as "blame", "praise", or "others").
+
+### 9. Rule Implementation
+Translate the above logic into Python code:
+- Use conditionals and logical rules to classify text based on detected features.
+- Implement checks for agent causality, foreseeability, and coercion.
+
+### 10. Evaluation
+- Compare your rule-based classifier against supervised models like SVM or Naive Bayes using standard metrics (precision, recall, F1-score).
+- Perform 10-fold cross-validation to validate the performance.
+
+### 11. Error Handling and Refinement
+- Handle edge cases, such as sentences without clear verb-object pairs or ambiguous sentiment.
+- Refine your rules based on evaluation results.
+
+### 12. Fine-Grained Classification
+- Extend your rules to distinguish between different types of blame and praise (self-blame, blame-others, etc.) based on agent pronouns and entity types.
+
+### 13. Testing and Optimization
+- Test on different types of text, including informal sources like social media.
+- Optimize by incorporating additional linguistic features or expanding your verb and sentiment lexicons.
+
+### 14. Documentation and Reporting
+- Document your approach, including any assumptions or challenges encountered.
+- Compare your results with those reported in the original paper, focusing on key insights.
+
+By following this plan, you can replicate the blame/praise detection approach outlined in the paper while gaining a deeper understanding of rule-based NLP systems.
