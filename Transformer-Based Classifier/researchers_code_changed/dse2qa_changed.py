@@ -1,7 +1,5 @@
 # -*- encoding: utf-8 -*-
 import os, logging, random, time
-import pandas as pd
-import numpy as np
 import argparse
 import torch
 import torch.nn as nn
@@ -9,7 +7,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from transformers import RobertaTokenizer, RobertaModel
 from transformers import AdamW, get_linear_schedule_with_warmup
-#from metrics import *
+from metrics import *
 
 
 class TransformerClassifierWithAuxiliarySentence(nn.Module):
@@ -21,10 +19,18 @@ class TransformerClassifierWithAuxiliarySentence(nn.Module):
         self.temperature = temperature
 
     def forward(self, input, attention_mask):
-        _, out = self.encoder(input, attention_mask=attention_mask)
-        out = self.out(out)
+        print("I reached forward")
+        print("Type input: ", type(input))
+        
+        out = self.encoder(input, attention_mask=attention_mask)[1]  # This gets only the last_hidden_state
+        print("1st Type out: ", type(out))
+        
+        out = self.out(out)  # Apply linear transformation
+        print("I passed that weird string", type(out))
+        
         out = out / self.temperature
-
+        print("I got out. Type: ", type(out))
+        
         return out
 
     def __str__(self):
@@ -48,10 +54,6 @@ class NewsDataset(Dataset):
 
 
 def proces_line(sent, label, pretrain_type, input_type):
-
-    tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-    encoder = RobertaModel.from_pretrained('roberta-base')
-    
     entstart_first_index = sent.find("[")
     entend_first_index = sent.find("]")
     ent1_token = sent[entstart_first_index:(entend_first_index + 1)]
@@ -91,24 +93,16 @@ def proces_line(sent, label, pretrain_type, input_type):
 
         combined_sentences.append(sent)
 
-    # Ensure the sentences are tokenized properly with the tokenizer
-    tokenized_inputs = tokenizer(combined_sentences, padding=True, truncation=True, return_tensors="pt")
-    input_ids = tokenized_inputs['input_ids']
-    attention_mask = tokenized_inputs['attention_mask']
-
     labels = np.zeros(5, dtype=int)
     labels[int(label)] += 1
     labels = labels.tolist()
 
-    #return combined_sentences, labels
-    return input_ids, attention_mask, labels
+    return combined_sentences, labels
 
 
 def get_loader(data, tokenizer, max_length, bsz=32):
     data_index = [i[0] for i in data]
     label_index = [i[1] for i in data]
-    #input = [i[2] for i in data]
-    #label = [i[3] for i in data]
     input = [i[2] for i in data]
     label = [i[3] for i in data]
     input = tokenizer.batch_encode_plus(input, add_special_tokens=False, max_length=max_length,
@@ -122,37 +116,22 @@ def get_loader(data, tokenizer, max_length, bsz=32):
 
 
 def main(args, train_path, logger, exp_id):
-
-    import os, logging, random, time
-    import pandas as pd
-    import numpy as np
-    import argparse
-    import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
-    from torch.utils.data import Dataset, DataLoader
-    from transformers import RobertaTokenizer, RobertaModel
-    from transformers import AdamW, get_linear_schedule_with_warmup
-    
     train = []
     valid = []
     test = []
 
-    tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-    encoder = RobertaModel.from_pretrained('roberta-base')
-
-    train_df = pd.read_csv("datasets/train_with_scobes.txt", sep="\t", header=None)
+    train_df = pd.read_csv(train_path, sep="\t", header=None)
     train_df.columns = ["Sent", "Ent1", "Ent2", "Label"]
     for idx, row in train_df.iterrows():
         inputs, labels = proces_line(row["Sent"], row["Label"], args.pretrain_type, args.input_type)
         for label_idx, (input, label) in enumerate(zip(inputs, labels)):
             train.append((idx, label_idx, input, label))
-    
+
     target_iter = len(train_df.index) * 5 * args.max_epoch # * 5 (augmented data)
     
     del train_df
 
-    valid_df = pd.read_csv("datasets/valid_with_scobes.txt", sep="\t", header=None)
+    valid_df = pd.read_csv("dataset/valid_with_scobes.txt", sep="\t", header=None)
     valid_df.columns = ["Sent", "Ent1", "Ent2", "Label"]
     for idx, row in valid_df.iterrows():
         inputs, labels = proces_line(row["Sent"], row["Label"], args.pretrain_type, args.input_type)
@@ -160,7 +139,7 @@ def main(args, train_path, logger, exp_id):
             valid.append((idx, label_idx, input, label))
     del valid_df
 
-    test_df = pd.read_csv("datasets/test_with_scobes.txt", sep="\t", header=None)
+    test_df = pd.read_csv("dataset/test_with_scobes.txt", sep="\t", header=None)
     test_df.columns = ["Sent", "Ent1", "Ent2", "Label"]
     for idx, row in test_df.iterrows():
         inputs, labels = proces_line(row["Sent"], row["Label"], args.pretrain_type, args.input_type)
@@ -168,10 +147,10 @@ def main(args, train_path, logger, exp_id):
             test.append((idx, label_idx, input, label))
     del test_df
 
-    #target_iter = len(train_df.index) * 5 * args.max_epoch # * 5 (augmented data)
 
-    #tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-    #encoder = RobertaModel.from_pretrained('roberta-base')
+
+    tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
+    encoder = RobertaModel.from_pretrained('roberta-base')
 
 
     model = TransformerClassifierWithAuxiliarySentence(encoder, args.temperature)
@@ -195,13 +174,8 @@ def main(args, train_path, logger, exp_id):
     )
 
     #model = model.cuda()
-
-    # Check if CUDA is available
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
-    # Example change for model initialization
+    device = torch.device("cpu")
     model = model.to(device)
-    
     loss_ce = nn.CrossEntropyLoss(reduction='none')
     performance_logs = {"valid": [], "test": []}
     logit_logs = []; label_logs = []
@@ -221,11 +195,12 @@ def main(args, train_path, logger, exp_id):
         for idx, batch in enumerate(train_loader):
             model.train()
             data_index, label_index, input_id, attention_mask, y = batch
+            print(type(input_id))
+            print(type(attention_mask))
             #input_id, attention_mask, y = input_id.cuda(), attention_mask.cuda(), y.cuda()
-            # Change for inputs and tensors
-            input_id, attention_mask, y = input_id.to(device), attention_mask.to(device), y.to(device)
-
+            #input_id, attention_mask, y = input_id.to(device), attention_mask.to(device), y.to(device)
             pred = model(input_id, attention_mask)
+            print("Shape of pred: ", pred.shape)
             loss_all = loss_ce(pred, y)
             loss = torch.mean(loss_all)
             loss.backward()
@@ -262,8 +237,7 @@ def main(args, train_path, logger, exp_id):
                 with torch.no_grad():
                     data_index, label_index, input_id, attention_mask, y = batch
                     #input_id, attention_mask, y = input_id.cuda(), attention_mask.cuda(), y.cuda()
-                    # Change for inputs and tensors
-                    input_id, attention_mask, y = input_id.to(device), attention_mask.to(device), y.to(device)
+                    #input_id, attention_mask, y = input_id.to(device), attention_mask.to(device), y.to(device)
                     pred = model(input_id, attention_mask)
                     loss_all = loss_ce(pred, y)
                     loss = torch.mean(loss_all)
@@ -332,25 +306,25 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_type", type=str, choices=["T", "P"], required=True)
     parser.add_argument("--resample", type=str, choices=["none", "up", "down"], required=True)
+    parser.add_argument("--pretrain_type", type=str, choices=["roberta", "spanbert"], required=True)
     parser.add_argument("--max_epoch", type=int, default=3)
     parser.add_argument("--batch_size", type=int, default=40)
     parser.add_argument("--random_seed", type=int, default=20180422)
+    parser.add_argument("--temperature", type=int, default=1.0)
     args = parser.parse_args()
 
     torch.manual_seed(args.random_seed)
     random.seed(args.random_seed)
     torch.manual_seed(args.random_seed)
     #torch.cuda.manual_seed_all(args.random_seed)
-    # Set CUDA seeds only if CUDA is available
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(args.random_seed)
+    torch.manual_seed(args.random_seed)
     np.random.seed(args.random_seed)
     os.environ['PYTHONHASHSEED'] = str(args.random_seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
     if args.resample == "none":
-        train_path = "dataset/train.txt"
+        train_path = "dataset/train_with_scobes.txt"
     elif args.resample == "up":
         train_path = "dataset/train_over.txt"
     elif args.resample == "down":
